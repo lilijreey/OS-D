@@ -158,7 +158,7 @@ static:
     void newLine()
     {
         pragma(inline, true);
-        //++cursor.y;
+        ++cursor.y;
         cursor.x=0;
     }
 
