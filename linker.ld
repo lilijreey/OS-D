@@ -33,7 +33,7 @@ SECTIONS{
 		bss = .; _bss = .; __bss = .;
 		*(.bss)
 		*(.bss.*)
-		/**(.tbss.*)*/
+		*(.tbss.*)
 		ebss = .;
 
 	}

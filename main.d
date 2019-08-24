@@ -4,36 +4,22 @@ import multiboot1;
 import vga;
 import err;
 
-extern(C)
-{
-
- extern __gshared int _vga_x;
- extern __gshared int _vga_y;
-}
-
 //64 mode
 extern(C) void dmain(uint magic, const MultibootInfo *info)
 {
-    //ubyte* BASE = cast(ubyte*)0xB_8000; //VGA memory
-    //BASE[20] = 'a';
-    //BASE[22] = 'a';
-    //BASE[24] = 'a';
-    //if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
-    //{
-    //    Err.panic("loader not mulitboot compliant");
-    //BASE[30] = 'a';
-    //BASE[32] = 'a';
-    //BASE[34] = 'a';
-    //}
+    Vga.init();
+    if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
+    {
+        Err.panic("loader not mulitboot compliant");
+    }
 
 
-    Vga.clearScreen();
-    //Vga.showGreeting();
+    Vga.showGreeting();
     //BASE[50] = 'b';
     //BASE[52] = 'b';
     //BASE[54] = 'b';
 
-    Vga.println(cast(ulong)&_vga_x);
+    //Vga.println(cast(ulong)&_vga_x);
     //if (&_vga_x == &_vga_x)
     //{
     //    Vga.putc('=');

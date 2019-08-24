@@ -262,12 +262,6 @@ p2_table:
 p1_table:
     	resb 4096
 
-[global _vga_x]
-_vga_x:
-	resb 8
-[global _vga_y]
-_vga_y:
-	resb 8
 
 ;align 16, db 0
 ;定义一个Stack空间; 16 KiB if you're wondering

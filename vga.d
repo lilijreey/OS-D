@@ -35,12 +35,7 @@ module vga;
  }
 
 
-extern(C)
-{
 
- extern __gshared int _vga_x;
- extern __gshared int _vga_y;
-}
 
 
 abstract final class Vga
@@ -48,16 +43,29 @@ abstract final class Vga
 public:
 static:
 
+    private __gshared Cursor cursor = void;
+    struct Cursor
+    {
+        uint x;
+        uint y;
+    }
+
+
     enum {COLUMNS = 80, LINES=25}
     enum  ubyte* BASE = cast(ubyte*)0xB_8000; //VGA memory
 
+    void init()
+    {
+        clearScreen();
+    }
     void clearScreen()
     {
+        cursor.x = 0;
+        cursor.y = 0;
+
         foreach (i ; 0..(COLUMNS * LINES *2))
             BASE[i] = 0;
 
-        _vga_x=0;
-        _vga_y=0;
     }
 
     void putc(const char c, Color color=Color.White)
@@ -69,11 +77,11 @@ static:
             return;
         }
 
-        BASE[_vga_x*2 + _vga_y*COLUMNS*2] = c;
-        BASE[_vga_x*2 + _vga_y*COLUMNS*2 + 1] =color;
-        //BASE[_vga_x*2 + 0*COLUMNS*2] = c;
-        //BASE[_vga_x*2 + 0*COLUMNS*2 + 1] =color;
-        ++_vga_x;
+        BASE[cursor.x*2 + cursor.y*COLUMNS*2] = c;
+        BASE[cursor.x*2 + cursor.y*COLUMNS*2 + 1] =color;
+        //BASE[cursor.x*2 + 0*COLUMNS*2] = c;
+        //BASE[cursor.x*2 + 0*COLUMNS*2 + 1] =color;
+        ++cursor.x;
 
     }
 
@@ -150,8 +158,8 @@ static:
     void newLine()
     {
         pragma(inline, true);
-        //++_vga_y;
-        _vga_x=0;
+        //++cursor.y;
+        cursor.x=0;
     }
 
 
