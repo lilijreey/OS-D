@@ -53,26 +53,33 @@ MultiBootHeader:
 
 
 start:
+    ;reset eflags
+	push 0
+	popf 
+
 	;设置esp, 支持push指令调用 因为push 指令会sub %4 esp
 	mov esp, early_stack_top
+	mov ebp, 0 
+
+	; 保持loader 传递的参数,给main
+	mov [multiboot_id], eax
+	mov [multiboot_info_addr], ebx
 
 	; 检测不通过 Why?
+	; TODO use asm
 	;call check_is_load_by_multiboot
-
-	;call biosVgaClearScreen
-	;call biosVgaShowGreeting
-
 	;call cpuidCheckSupport
 	;call cpuidCheckHasLongMode
      
 
 	mov eax, 0x2f592f41
 	mov [0xb8000], eax
+
 	; 尽快进入long mode 因为在32bit模式下必须调用32位代码
 	; set IDT
 
 init_page_table: 
-;这里设置映射0-2M的VM地址到物理地址0-2M的页表，之后的到进入64bit后在D中初始化
+;设置临时页表映射0-2M的VM地址到物理地址0-2M的页表，之后的到进入64bit后在D中初始化
 ;0-2M 需要初始化的页表有
 ;        one l4[0] 512G
 ;        one l3[0] 1G
@@ -164,12 +171,6 @@ cpuhalt:
 
 [bits 64]
 
-[extern biosVgaClearScreen]
-[extern biosVgaShowGreeting]
-[extern biosVgaShowMsg]
-
-[extern cpuidCheckSupport]
-[extern cpuidCheckHasLongMode]
 start64:
 	;set clear all segment reg to 0
 	mov ax, 0
@@ -179,15 +180,25 @@ start64:
 	mov fs, ax
 	mov gs, ax
 
+	mov rbp, 0
 	mov rsp, early_stack_top
 
 	mov rax, 0x2f592f412f4b2f4f
 	mov qword [0xb8010], rax
 
-	;call biosVgaClearScreen
-	;call biosVgaShowGreeting
+	;call main()
+	xor rax, rax
+	mov rdi, rax
+	mov rsi, rax
+	mov edi, dword [multiboot_id]
+	mov esi, dword [multiboot_info_addr]
+	extern dmain
+	call dmain
 
-    hlt
+
+	hlt
+sleep:
+	jmp sleep
 
 ;fn show_msg(const char *msg:ax) -> void
 
@@ -228,6 +239,13 @@ gdt64_pointer:
      dq gdt64 ;addr 
    
 
+[section .data]
+align 8, db 0
+;保持grub 传递的数据
+multiboot_id:
+	dd 0
+multiboot_info_addr:
+	dd 0
 
 [section .bss]
 
@@ -241,10 +259,22 @@ p3_table:
 	resb 4096
 p2_table:
     	resb 4096
+p1_table:
+    	resb 4096
 
-align 64, db 0
+[global _vga_x]
+_vga_x:
+	resb 8
+[global _vga_y]
+_vga_y:
+	resb 8
+
+;align 16, db 0
 ;定义一个Stack空间; 16 KiB if you're wondering
 early_stack_base:
-	;resb      1<<16 
-	resb      4096
+	resb      1<<16 
+	;resb      4096
 early_stack_top:
+
+
+

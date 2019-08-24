@@ -11,30 +11,36 @@ SECTIONS{
 	}
 	.text :{
 		*(.text)
+		*(.text.*)
         }
 
 	. = ALIGN (0x1000);
 
 	.rodata  : {
 	       	*(.rodata)
+	       	*(.rodata.*)
 
         }
 
 	. = ALIGN (0x1000);
 	.data : {
 		*(.data)
+		*(.data.*)
 	}
 
 	. = ALIGN(0x1000);
 	.bss : {
 		bss = .; _bss = .; __bss = .;
-		*(COMMON)
 		*(.bss)
-		*(.tbss)
+		*(.bss.*)
+		/**(.tbss.*)*/
 		ebss = .;
 
 	}
 	end = .; _end = .; __end = .;
+
+	 . = ALIGN(0x1000);
+	   .eh_frame (NOLOAD) : { *(.eh_frame)  } : NONE
 	
 	/*由于只设置了2M的内存，加个断言 */
 	ASSERT(end < 2M, "end > 2M")

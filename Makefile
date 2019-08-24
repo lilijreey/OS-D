@@ -8,37 +8,30 @@ ISO_BIN=kernel.iso
 
 all: qemu
 
-DD= ldc2
-DFLAGS= -betterC -m64 -c
+DC= ldc2
+DFLAGS= -betterC -m64 -c -of
 #DFLAGS= -betterC -m32 -c
 
-OBJS=boot.o  bios.vga.o main.o err.o #cpuid.o 
+LIBGCC_S=`gcc -m64 -print-libgcc-file-name`
 
 SRC=${wildcard *.d *.asm bios/*.d}
+
+OBJS=boot.o  vga.o main.o err.o ldc2lib.o #cpuid.o 
+
+
+%.o : %.d
+	${DC} ${DFLAGS} $@ $<
 
 src: 
 	@echo ${SRC}
 
 kernel: ${OBJS} 
-	#ld -m elf_x86_64 -T linker.ld -o kernel $^
-	ld -z max-page-size=4096 -m elf_i386 -T linker.ld -o kernel $^
+	ld -z max-page-size=4096 -m elf_i386 -T linker.ld -o kernel $^ 
 
 
 boot.o: boot.asm 
 	nasm -f elf64 -o boot.o boot.asm
 	#nasm -f elf -o boot.o boot.asm #for 32
-
-bios.vga.o: bios/vga.d
-	${DD} ${DFLAGS} -of $@ $^
-
-main.o: main.d
-	${DD} ${DFLAGS} -of $@ $^
-
-cpuid.o: cpuid.d
-	${DD} ${DFLAGS} -of $@ $^
-
-err.o: err.d
-	${DD} ${DFLAGS} -of $@ $^
 
 #qemu: ${ISO_BIN} ${SRC}
 qemu: kernel ${SRC}
