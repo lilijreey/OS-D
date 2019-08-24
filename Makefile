@@ -21,7 +21,7 @@ src:
 
 kernel: ${OBJS} 
 	#ld -m elf_x86_64 -T linker.ld -o kernel $^
-	ld -m elf_i386 -T linker.ld -o kernel $^
+	ld -z max-page-size=4096 -m elf_i386 -T linker.ld -o kernel $^
 
 
 boot.o: boot.asm 
@@ -40,9 +40,9 @@ cpuid.o: cpuid.d
 err.o: err.d
 	${DD} ${DFLAGS} -of $@ $^
 
-qemu: ${ISO_BIN} ${SRC}
-	qemu-system-x86_64 -cdrom ${ISO_BIN} -serial stdio -m 1024M
-	#qemu-system-i386 -cdrom ${ISO_BIN} -serial stdio -m 1024M
+#qemu: ${ISO_BIN} ${SRC}
+qemu: kernel ${SRC}
+	qemu-system-x86_64 -kernel kernel -serial stdio -m 1024M
 
 
 ${ISO_BIN}: kernel

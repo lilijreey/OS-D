@@ -24,25 +24,22 @@
 ; 可以使用 grub-file --is-x86-multiboot2  <file>
 ; 来检测是否是有效的头， 返回值为0 表示有效
   
+MODULEALIGN        equ        1<<0
+MEMINFO            equ        1<<1 ; 设置MEMINFO 可以让grub把内存信息通过edx传递尽量
 
-%define MB_MAGIC 0xE85250D6 ; v2.magic
-%define MB_ARCH 0 ;x86-32 protect mode
-%define MB_HEAD_LEN (mb_end - mb_header)
+FLAGS              equ        MODULEALIGN | MEMINFO
+MAGIC              equ        0x1BADB002
+CHECKSUM           equ        -(MAGIC + FLAGS)
+
+;%define MB_MAGIC 0xE85250D6 ; v2.magic
+;%define MB_ARCH 0 ;x86-32 protect mode
+;%define MB_HEAD_LEN (mb_end - mb_header)
 
 [section .boot]
-mb_header:
-	dd MB_MAGIC
-	dd MB_ARCH
-	dd MB_HEAD_LEN
-	dd -(MB_MAGIC + MB_ARCH + MB_HEAD_LEN)
-
-align 8, db 0
-      ; tags
-
-      ; 必须以null tag结束
-      dw 0,0
-      dd 8
-mb_end:
+MultiBootHeader:
+	dd MAGIC
+	dd FLAGS
+	dd CHECKSUM
 
 
 
@@ -107,7 +104,11 @@ init_page_table:
 	mov [p2_table],eax
 
 
-	mov [p2_table],eax
+	mov eax, (2<<20) |PD_PRESENT |PD_RW | PD_2MB
+	mov [p2_table+8],eax
+
+	mov eax, (3<<20) |PD_PRESENT |PD_RW | PD_2MB
+	mov [p2_table+16],eax
 
 	;cr3=p4_table
 	mov eax, p4_table
@@ -133,6 +134,9 @@ init_page_table:
         lgdt [gdt64_pointer]
 
 	;;load new 64bit cs with jmp
+	;这里的jmp是用来刷新
+	;令流水线和高速缓存可能会在新的全局描述符表加载之后依旧保持之前的缓存，
+	;那么修改GDTR之后最安全的做法就是立即清空流水线和更新高速缓存
 	jmp 8:start64
 
 
@@ -180,7 +184,7 @@ start64:
 	mov rax, 0x2f592f412f4b2f4f
 	mov qword [0xb8010], rax
 
-	call biosVgaClearScreen
+	;call biosVgaClearScreen
 	;call biosVgaShowGreeting
 
     hlt
