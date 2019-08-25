@@ -34,7 +34,7 @@ SECTIONS{
 		*(.bss)
 		*(.bss.*)
 		*(.tbss.*)
-		ebss = .;
+		/*ebss = .;*/
 
 	}
 	end = .; _end = .; __end = .;

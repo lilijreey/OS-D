@@ -39,6 +39,8 @@ objcopy -I elf64-x86-64 -O elf32-i386 KERNEL
 
 内存:
 ## Long mode
+页表
+see page_table.d
 
 52bit 物理内存最大可寻址 4096TB
 虚拟地址64位但只有低48位会经过页转换，48:63为和47bit一致
@@ -92,19 +94,69 @@ cr3                      total     256T
 * 实模式中断
   实模式下的中断向量表是固定死的，从内存的0到1K
   工256个，并且都是由BISO 设置,并处理的
+  IDTR 自动设置为0，IRQ作为idx 查找中断向量表
+  实模式先中断程序有BIOS提供
 
-  中断触发时,CPU自动执行保护现场，并跳转到中断程序，执行完后
-  回复现场
+  中断触发时,CPU自动执行保护现场，并跳转到中断程序，执行完后回复现场
+  1. Pushes the FLAGS register (EFLAGS[15:0]) onto the stack.
+  2. Clears EFLAGS.IF to 0 and EFLAGS.TF to 0.
+  3. Saves the CS register and IP register (RIP[15:0]) by pushing them onto the stack.
+  4. Locates the interrupt-handler pointer (CS:IP) in the IDT by scaling the interrupt vector by four
+and adding the result to the value in the IDTR.
+  5. Transfers control to the interrupt handler referenced by the CS:IP in the IDT.
 
 
 
 * 保护模式中断
- 保护模式通过IDT来设置中断向量表
+ 保护模式通过IDT来设置中断描述符表，表中的每个描述符叫做gate descriptors 门描述符
+ 包含关于中断处理程序的权限等信息和选择子, 一个gate descriptor 为8B.
+ 总共允许256个Gate, 1-31被系统保留，32-255给用户使用
+ gate 分为3类
+ 1. Interrupt gates
+ 2. trap gates
+ 3. task gates
 
-  中断触发时,根据IDT中的不同类型，执行不同的处理
+ 异常分类
+ 有个异常可以被修复，有的不行，分为3中
+ 1. fault 执行中断程序后再次执行触发异常的指令
+ 2. trap  执行中断程序后执行触发异常指令的下一条指令
+ 3. abort 无法继续进行
+
+
+
+ 中断触发时,根据IDT中的不同类型，执行不同的处理
+
+ 进入保护模式后，原有的IRQ中断号和CPU保留的内部异常号冲突，导致无法区分是中断发送还是内部异常，
+ 所以需要先重映射绑定中断，然后重新映射中断表（向量) 通过设置oGDTR 来完成
+
+  触发流程：
+  1. cpu 在IDTR.base 中查找IDT地址，根据IRQ寻址entry,
+  2. 检测entry中的权限并得到selector,包含中断向量表的offset
+  3. 根据selector访问GDT/LDT中的entry,得到中断程序的段基地址
+  4. 根据基地址和offset 访问中断服务程序
+  注意这里是IDT中存放的offset,并没有base addr, base addr 需要从GDT/LDT中活动
+  对于flat 内存这里有点多此一举
+
+
+
+
+* Long 模式中断处理
+  机制和32位相同gate descriptor 大小变为16B
+  废除了task gates
+
+
+
+中断控制芯片
+=======================================
+
+* 8259A
+旧系统使用
+
+IDT 中断描述符表
 
 
 x86-64 调用约定
 ================================
 前六个使用寄存器传递
 %rdi, %rsi, %rdx, %rcx, %r8, %r9
+返回 rax

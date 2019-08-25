@@ -200,6 +200,13 @@ start64:
 sleep:
 	jmp sleep
 
+
+[global asm_fn]
+asm_fn:
+	mov rax, p2_table
+	ret
+
+
 ;fn show_msg(const char *msg:ax) -> void
 
 ;fn clear_screen:
@@ -234,6 +241,9 @@ gdt64:
 gdt64_code:
      ;code segment 虽然long 模式没有段管理了，但是对应的段权限还是使用gdt entry来控制
      dq GDT_PRESENT | GDT_EXEC | GDT_64_CODE | GDT_TYPE
+	 ;data segment long 模式下数据段已经被disable 了但是还留给了FS,GS作为段选择子的能力，
+	 ;用来实现TLS 线程局部变量
+     dq GDT_PRESENT | GDT_EXEC | GDT_64_CODE | GDT_TYPE
 gdt64_pointer:
      dw $ - gdt64 -1 ;len
      dq gdt64 ;addr 
@@ -261,6 +271,10 @@ p2_table:
     	resb 4096
 p1_table:
     	resb 4096
+
+[global idt_addr]
+idt_addr:
+	resb 4096
 
 
 ;align 16, db 0

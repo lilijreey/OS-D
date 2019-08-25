@@ -16,7 +16,7 @@ LIBGCC_S=`gcc -m64 -print-libgcc-file-name`
 
 SRC=${wildcard *.d *.asm bios/*.d}
 
-OBJS=boot.o  vga.o main.o err.o ldc2lib.o #cpuid.o 
+OBJS=boot.o  vga.o main.o err.o ldc2lib.o memory.o idt.o 
 
 
 %.o : %.d
@@ -26,7 +26,7 @@ src:
 	@echo ${SRC}
 
 kernel: ${OBJS} 
-	ld -z max-page-size=4096 -m elf_i386 -T linker.ld -o kernel $^ 
+	ld -z max-page-size=4096 -m elf_i386 -T linker.ld -M=k.map -o kernel $^ 
 
 
 boot.o: boot.asm 

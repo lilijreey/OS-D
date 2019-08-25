@@ -3,23 +3,24 @@ module main;
 import multiboot1;
 import vga;
 import err;
+import idt;
 
 //64 mode
 extern(C) void dmain(uint magic, const MultibootInfo *info)
 {
     Vga.init();
+    Vga.showGreeting();
+
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
     {
         Err.panic("loader not mulitboot compliant");
     }
 
 
-    Vga.showGreeting();
-
     if (info.flags & 0x1) {
-        //说明mem_lower mem_upper 有效 ///Vga.println(33);
+        //说明mem_lower mem_upper 有效 
         
-        //   BISO有效内存空间, Qus. 做什么用的?
+        //   BISO有效内存空间, Qus. 做什么用的 提供给User使用的
         //   lower 从0开始到lower,
         //   upper 从1M开始到upper 基本是
         
@@ -48,8 +49,14 @@ extern(C) void dmain(uint magic, const MultibootInfo *info)
             // .size 是包含自己本身的所以要在加上.size的大小
             addr += ms.size + ms.size.sizeof;
         }
-           
     }
 
+
+
+    //init GDT mmap higt viraul memory to xx
+    Idt.init();
+
+    //int b=0;
+    //int a = 1/b;
 
 }
