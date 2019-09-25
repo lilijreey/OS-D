@@ -1,135 +1,293 @@
+﻿/**
+ * Copyright (c) Rikarin and contributors. All rights reserved.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 module idt;
-import std.bitmanip;
+
+import registers;
+import pic;
+import common.bitfield;
+import common.address;
 import err;
 import vga;
 
 
-struct GateDesc {
-align(1):
-    ushort offset_0_15;
-    ushort selector;
-    ushort offset_16_31;
-    /*
-    15 14-13 12 11-8  7-3 2-0
-    P  DPL   0  TYPE  ign IST
-    */
-    ushort info; //iST, Type, DPL, P
-    uint   offset_32_63;
-    uint   _res;
-
-    enum {
-      INFO_P_MASK = 0x8000,
-      INFO_DPL_MASK =0x7000,
-      INFO_TYPE_MASK = 0x0F00,
-      INFO_IST_MASK = 0x0007,
-    }
-
-    enum { //long 模式下有效的type取值
-        INFO_TYPE_INTERRUPT_GATE = 0xE,
-        INFO_TYPE_TRAP_GATE = 0xF,
-    }
-
-    enum: ushort //info
-    {
-          //DLP=0 最高特权, IST=0
-          INTERR_INFO = (1<<15) | (INFO_TYPE_INTERRUPT_GATE << 8),
-          TRAP_INFO = (1<<15) | (INFO_TYPE_TRAP_GATE << 8),
-    }
-
-
-    private 
-    void set(ulong _offset, ushort _info)
-    {
-        this.selector = 0x8;//GDT CS
-        this.info = _info;
-        this.offset_0_15 = _offset & 0xFFFF;
-        this.offset_16_31 = (_offset >> 16) & 0xFFFF;
-        this.offset_32_63 = (_offset >> 32);
-        this._res=0;
-    }
-
-    void set_trap(void* fn)
-    {
-        set(cast(ulong)fn, TRAP_INFO);
-    }
-
-    void set_interrput(void* fn)
-    { 
-        set(cast(ulong)fn, INTERR_INFO);
-    }
-                           
-
-    int p() const @property {
-        return info & INFO_P_MASK;
-    }
-
-    int dpl() const @property {
-        return info & INFO_DPL_MASK;
-    }
-
-    int type() const @property {
-        return info & INFO_TYPE_MASK;
-    }
-
-    int ist() const @property {
-        return info & INFO_IST_MASK;
-    }
-    
-}
-
-struct Idtr {
-align(1):
-    ushort limit; //idt table size
-    ulong base_addr;
-}
-
-
-
-abstract final class Idt {
-//@safe nothrow: @nogc: 
+abstract final class IDT {
+//@safe: nothrow: @nogc:
 static:
-    private __gshared Idtr idtr=void;
-    private __gshared GateDesc[256] idt = void;
-    private __gshared int xxend;
+	alias InterruptCallback = void function(scope Registers* regs);
+	
+    private __gshared Base m_base;
+    private __gshared Descriptor[256] m_entries;
+	private __gshared InterruptCallback[256] m_handlers;
+    
 
-    void cpu_todo_handler() {
-        Err.panic("CPU interrput todo handler");
+    void init() @trusted {
+        m_base.limit = Descriptor.sizeof * m_entries.length - 1;
+        m_base.base  = cast(ulong)m_entries.ptr;
+        
+		initISR();
+		flush();
+		
+		register(0x0D, &onGPF);
+
+		asm pure nothrow @nogc {
+			sti;
+		}
+    }
+	
+	void flush() @trusted {
+		auto base = &m_base;
+	
+		asm pure nothrow @nogc {
+			mov RAX, base;
+			lidt [RAX];
+		}
+	}
+	
+	void register(uint id, InterruptCallback callback) @trusted {
+		m_handlers[id] = callback;
+	}
+	
+	VAddr registerGate(uint id, VAddr func) @trusted {
+		VAddr ret;
+		
+		with (m_entries[id]) {
+			ret = ((cast(ulong)targetHi << 32UL) | (cast(ulong)targetMid << 16UL) | cast(ulong)targetLo);
+		}
+			
+        setGate(id, SystemSegmentType.InterruptGate, func, 0, InterruptStackType.RegisterStack);
+		return ret;
+    }
+	
+	private void setGate(uint id, SystemSegmentType gateType, ulong funcPtr, ushort dplFlags, ushort istFlags) @trusted {
+        with (m_entries[id]) {
+            targetLo  = funcPtr & 0xFFFF;
+            segment   = 0x08;
+            //ist       = istFlags;
+            ist       = 0;
+            p         = true;
+            dpl       = dplFlags;
+            type      = cast(uint)gateType;
+            targetMid = (funcPtr >> 16) & 0xFFFF;
+            targetHi  = (funcPtr >> 32);
+        }
     }
 
-    void cpu0_div0() {
-        Err.panic("CPU Exception: div 0");
-    }
-
-    public
-    void init()
+    void divxx()
     {
-        //全部设置一下
-        //foreach(int i; 0 .. idt.length)
-        //    idt[i].set_interrput(&cpu_todo_handler);
-
-
-        //Vga.clearScreen();
-        Vga.println(cast(ulong)&(idtr.limit));
-        //设置cpu 保留0-31 给内部异常处理
-        //idt[0].set_trap(&cpu0_div0);
-        //if (idt[0].p)
-        //    Vga.println("0 P");
-
-        //用户自定义
-        //TODO
-
-        //load idt
-        //idtr.limit = idt.sizeof -1;
-        //idtr.base_addr = cast(ulong)idt.ptr;
-
-        //auto idt_addr = &idt;
-        //asm pure nothrow @nogc{
-        //    mov RAX, idt_addr;
-        //    lidt [RAX];
-        //}
-
-        //重新映射PIC IRQ 到自定义index
-        //Master PIC 0x20
-        //Slave PIC 0xA0
+        //Vga.puts("div 0");
+        Err.panic("div 0");
     }
+	
+	private void initISR() {
+		mixin(addRoutines!(0, 255));
+		
+        //setGate(0,      SystemSegmentType.TrapGate, cast(ulong)&divxx,      3, InterruptStackType.Debug);
+		//setGate(3,      SystemSegmentType.InterruptGate, cast(ulong)&isr3,      3, InterruptStackType.Debug);
+		//setGate(8,      SystemSegmentType.InterruptGate, cast(ulong)&isrIgnore, 0, InterruptStackType.RegisterStack);
+		//setGate(irq(1), SystemSegmentType.InterruptGate, cast(ulong)&isrIgnore, 0, InterruptStackType.RegisterStack);
+		//setGate(irq(4), SystemSegmentType.InterruptGate, cast(ulong)&isrIgnore, 0, InterruptStackType.RegisterStack);
+		//setGate(0x80,   SystemSegmentType.InterruptGate, cast(ulong)&isr128,    3, InterruptStackType.RegisterStack);
+	}
+	
+	private extern(C) void isrCommon() @trusted {
+        asm pure nothrow @nogc {
+            naked;
+            /* Save context */
+            push RAX;
+            push RBX;
+            push RCX;
+            push RDX;
+            push RSI;
+            push RDI;
+            push RBP;
+            push R8;
+            push R9;
+            push R10;
+            push R11;
+            push R12;
+            push R13;
+            push R14;
+            push R15;
+            
+            /* Call dispatcher rdi */
+            mov RDI, RSP;
+            call isrHandler;
+            
+            /* Restore context */
+            pop R15;
+            pop R14;
+            pop R13;
+            pop R12;
+            pop R11;
+            pop R10;
+            pop R9;
+            pop R8;
+            pop RBP;
+            pop RDI;
+            pop RSI;
+            pop RDX;
+            pop RCX;
+            pop RBX;
+            pop RAX;
+
+            add RSP, 16;
+            iretq; // iretq;
+        }
+    }
+	
+	private void isrIgnore() @trusted {
+        asm pure nothrow @nogc {
+            naked;
+			cli;
+            nop;
+            nop;
+            nop;
+
+            iretq;
+        }
+    }
+	
+	private extern(C) void isrHandler(Registers* r) @trusted {
+		// TODO: save SSE
+		r.intNumber &= 0xFF;
+
+        //Err.panic("xxx");
+        Vga.println("int:",r.intNumber);
+		
+		if (PIC.isEnabled && irq(0) <= r.intNumber && r.intNumber <= irq(16)) {
+			if (r.intNumber >= irq(8)) {
+				//outPort!ubyte(0xA0, 0x20);
+			}
+			
+			//outPort!ubyte(0x20, 0x20);
+		}
+		
+		if (auto x = m_handlers[r.intNumber]) {
+			x(r);
+		} else {
+			// TODO: print unhandled interrupt
+		}
+		
+		// TODO: load SSE
+	}
+	
+	private void onGPF(scope Registers* r) {
+		// TODO: print GPF
+	
+		while (true) {
+			asm @trusted pure nothrow @nogc {
+				hlt;
+			}
+		}
+	}
+	
+	private template generateRoutine(ulong id, bool hasError = false) {
+		enum generateRoutine = `
+			private static void isr` ~ id.stringof[0 .. $ - 2] ~ `() @trusted {
+				asm nothrow @nogc {
+					naked;
+					` ~ (hasError ? "" : "push 0UL;") ~ `
+					push ` ~ id.stringof ~ `; //把id压栈
+					jmp isrCommon;
+				}
+			}
+		`;
+	}
+
+	private template generateRoutines(ulong from, ulong to, bool hasError = false) {
+		static if (from <= to)
+			enum generateRoutines = generateRoutine!(from, hasError) ~ generateRoutines!(from + 1, to, hasError);
+		else
+			enum generateRoutines = "";
+	}
+	
+	private template addRoutine(ulong id) {
+		enum addRoutine = `
+            setGate(` ~ id.stringof[0 .. $ - 2] ~ `, SystemSegmentType.InterruptGate, cast(ulong)&isr`
+				~ id.stringof[0 .. $ - 2] ~ `, 0, InterruptStackType.RegisterStack);`;
+	}
+
+	private template addRoutines(ulong from, ulong to) {
+		static if (from <= to)
+			enum addRoutines = addRoutine!from ~ addRoutines!(from + 1, to);
+		else
+			enum addRoutines = "";
+	}
+	
+	mixin(generateRoutines!(0, 7));
+	mixin(generateRoutine!(8, true));
+	mixin(generateRoutine!(9));
+	mixin(generateRoutines!(10, 14, true));
+	mixin(generateRoutines!(15, 255));
 }
+
+
+alias irq = (byte x) => cast(byte)(0x20 + x);
+
+enum InterruptStackType : ushort {
+	RegisterStack,
+	StackFault,
+	DoubleFault,
+	NMI,
+	Debug,
+	MCE
+}
+
+enum InterruptType : ubyte {
+	DivisionByZero,
+	Debug,
+	NMI,
+	Breakpoint,
+	Overflow,
+	OutOfBounds,
+	InvalidOpcode,
+	CoprocessorNotAvailable,
+	DoubleFault,
+	CoprocessorSegmentOverrun,
+	InvalidTaskStateSegment,
+	SegmentNotPresent,
+	StackFault,
+	GeneralProtectionFault,
+	PageFault,
+	UnknownInterrupt,
+	CoprocessorFault,
+	AlignmentCheck,
+	MachineCheck,
+	SimdFloatingPointException
+}
+
+enum SystemSegmentType : ubyte {
+    LocalDescriptorTable = 0b0010,
+    AvailableTSS         = 0b1001,
+    BusyTSS              = 0b1011,
+    CallGate             = 0b1100,
+    InterruptGate        = 0b1110,
+    TrapGate             = 0b1111
+}
+
+
+private struct Base {
+align(1):
+	ushort limit;
+	ulong  base;
+}
+
+private struct Descriptor {
+@trusted: nothrow: @nogc:
+align(1):
+	ushort         targetLo;
+	ushort         segment;
+	private ushort m_flags;
+	ushort         targetMid;
+	uint           targetHi;
+	private uint   _reserved_0;
+	
+	mixin(bitfield!(m_flags, "ist", 3, "zero0", 5, "type", 4, "zero1", 1, "dpl", 2, "p", 1));
+}
+
+static assert(Base.sizeof == 10);
+static assert(Descriptor.sizeof == 16);

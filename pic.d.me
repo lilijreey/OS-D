@@ -1,0 +1,101 @@
+
+module pic;
+
+import assm.io;
+
+/*
+   8259A 中断
+
+   一般是两个8259A chips 级联, echo chip has 8 irq
+   slave-pic 级联到主的IRQ2上
+
+   https://wiki.osdev.org/PIC
+
+   * 概念 
+      1. IRQ Interrupt Request
+         这个是硬件概念
+
+      2. Interrrupt Numbers 
+          软件概念 一般一组IRQ 会映射为一组中断号
+          因为每个对于每个硬件来说IRQ可能都是从0开始，
+          但是对于系统来说需要给区分不不同硬件的不同IRQ
+
+      3. 中断向量
+         这个是相对于中断表（handler）来说的表示在表中的偏移 index
+          table[idx] 这个idx叫做中断向量
+      
+
+   * real Mode 下
+   Master 0~7 IRQ 对应的BISO中断号为0x08 ~ 0x0F
+   Slave 0~7 IRQ 对应的BISO中断好为0x70 ~ 0x77
+
+   * 保护模式下有个问题,因为CPU预留了0~0x1F 中断号表示内部异常
+     所以无法分清到底是中断的IRQ还是CPU自身的异常,
+     为了解决这种情况，一般会重映射PIC IRQ的偏移量为其他值
+     一般为0x20~0x2F 16个
+
+
+    * 编程接口
+
+      ICW0
+      ICW1
+      ICW2
+      ICW3
+
+
+    //保护模式/long模式, 8259a的IRQ 已经和CPU预留异常ID冲突，需要重新设置IRQ对应的INT号
+    //一般把 master0-7 映射到32-39， slave 映射到40-47
+
+
+    EOI模式: cpu 处理完中断后必须手动给PIC发送中断结束符EOI指令，来复位ISR寄存器
+
+*/
+
+
+void init_8259a()
+{
+    enum {
+        PIC1_CMD=0x20, //IO base address for master PIC
+        PIC2_CMD=0xA0,
+
+        PIC1_DATA = PIC1_CMD+1,
+        PIC2_DATA = PIC2_CMD+1,
+        PIC_DATA = PIC1_CMD+1,
+
+        //重映射后中断号
+        PIC1_INT = 0x20,//32
+        PIC2_INT = 0x28,//40
+    }
+
+    //初始化ICW1-4 寄存器，必须依次初始化
+    //init  ICW1
+    io_out8(PIC1_CMD, 0x11);
+    io_out8(PIC2_CMD, 0x11);
+
+    //remap INT ICW2
+    io_out8(PIC1_DATA, PIC1_INT); //中断号描述
+    io_out8(PIC2_DATA, PIC2_INT);
+
+    //init  ICW3
+    io_out8(PIC1_DATA, 0x04);
+    io_out8(PIC2_DATA, 0x02);
+
+    //init ICW4
+    io_out8(PIC1_DATA, 0x01);
+    io_out8(PIC2_DATA, 0x01);
+
+    //maks interrupts
+    io_out8(PIC1_DATA, 0x0);
+    io_out8(PIC2_DATA, 0x0);
+}
+
+
+void timer_handler()
+{
+
+}
+
+void keyboard_handler()
+{
+
+}

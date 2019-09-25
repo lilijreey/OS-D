@@ -120,6 +120,7 @@ and adding the result to the value in the IDTR.
  有个异常可以被修复，有的不行，分为3中
  1. fault 执行中断程序后再次执行触发异常的指令
  2. trap  执行中断程序后执行触发异常指令的下一条指令
+     trap 可以用来实现系统调用
  3. abort 无法继续进行
 
 
@@ -134,8 +135,17 @@ and adding the result to the value in the IDTR.
   2. 检测entry中的权限并得到selector,包含中断向量表的offset
   3. 根据selector访问GDT/LDT中的entry,得到中断程序的段基地址
   4. 根据基地址和offset 访问中断服务程序
+  5. 把当前cs,eip,eflag 寄存器压栈,调用中断程序
   注意这里是IDT中存放的offset,并没有base addr, base addr 需要从GDT/LDT中活动
   对于flat 内存这里有点多此一举
+
+   软件:
+    操作系统应该保存其他寄存器,用于恢复之前的运行上下文
+   
+   CPU并不会告知是那个iqr被触发了，为了得到具体的irq，可以为每个向量生成代码是自动把irq压入栈中
+    
+
+
 
 
 
@@ -154,6 +164,30 @@ and adding the result to the value in the IDTR.
 
 IDT 中断描述符表
 
+   https://wiki.osdev.org/PIC
+
+   * 概念 
+      1. IRQ Interrupt Request
+         这个是硬件概念
+
+      2. Interrrupt Numbers 
+          软件概念 一般一组IRQ 会映射为一组中断号
+          因为每个对于每个硬件来说IRQ可能都是从0开始，
+          但是对于系统来说需要给区分不不同硬件的不同IRQ
+
+      3. 中断向量
+         这个是相对于中断表（handler）来说的表示在表中的偏移 index
+          table[idx] 这个idx叫做中断向量
+      
+
+   * real Mode 下
+   Master 0~7 IRQ 对应的BISO中断号为0x08 ~ 0x0F
+   Slave 0~7 IRQ 对应的BISO中断好为0x70 ~ 0x77
+
+   * 保护模式下有个问题,因为CPU预留了0~0x1F 中断号表示内部异常
+     所以无法分清到底是中断的IRQ还是CPU自身的异常,
+     为了解决这种情况，一般会重映射PIC IRQ的偏移量为其他值
+     一般为0x20~0x2F 16个
 
 x86-64 调用约定
 ================================

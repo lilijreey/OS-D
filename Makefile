@@ -9,14 +9,14 @@ ISO_BIN=kernel.iso
 all: qemu
 
 DC= ldc2
-DFLAGS= -betterC -m64 -c -of
+DFLAGS= -betterC -m64 -c  -relocation-model=static -of
 #DFLAGS= -betterC -m32 -c
 
 LIBGCC_S=`gcc -m64 -print-libgcc-file-name`
 
 SRC=${wildcard *.d *.asm bios/*.d}
 
-OBJS=boot.o  vga.o main.o err.o ldc2lib.o memory.o idt.o 
+OBJS=boot.o  vga.o main.o err.o ldc2lib.o memory.o idt.o  pic.o assm/io.o common/address.o common/bitfield.o
 
 
 %.o : %.d

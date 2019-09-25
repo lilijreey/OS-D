@@ -36,7 +36,7 @@ module vga;
 
 
 
-extern(C) extern __gshared ulong  p4_table;
+extern(C) extern __gshared size_t p4_table;
 extern(C) __gshared int xx= void;
 abstract final class Vga
 {
@@ -56,17 +56,7 @@ static:
 
     void init()
     {
-        int a;
-        int b;
         clearScreen();
-        Vga.println(cast(ulong)&cursor);
-        Vga.println(cast(ulong)&(cursor.y));
-        Vga.println(cast(ulong)p4_table);
-        Vga.println("xx:", cast(ulong)&xx);
-        ulong ret = asm_fn();
-        Vga.println("ret:",ret);
-        //Vga.println(cast(ulong)&a);
-        //Vga.println(cast(ulong)&b);
     }
     void clearScreen()
     {

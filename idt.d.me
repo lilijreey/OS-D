@@ -1,0 +1,146 @@
+module idt;
+import std.bitmanip;
+import err;
+import vga;
+import pic;
+
+static assert(ulong.sizeof == size_t.sizeof);
+
+private 
+enum DescType : ubyte
+{
+    CALL_GATE      = 0xC,
+    INTERRUPT_GATE = 0xE,
+    TRAP_GATE      = 0xF,
+}
+
+struct GateDesc {
+@trusted: nothrow: @nogc:
+align(1):
+    ushort offset_0_15;
+    ushort selector;
+    /*
+    15 14-13 12 11-8  7-3 2-0
+    P  DPL   0  TYPE  ign IST
+    */
+    ushort flags; //iST, Type, DPL, P
+    ushort offset_16_31;
+    uint   offset_32_63;
+    uint   _res;
+
+    enum {
+      FLAGS_P_MASK = 0x8000,
+      FLAGS_DPL_MASK =0x7000,
+      FLAGS_TYPE_MASK = 0x0F00,
+      FLAGS_IST_MASK = 0x0007,
+    }
+
+    enum: ushort //flags
+    {
+          //DLP=0 最高特权, IST=0
+          INTERR_FLAGS= (1<<15) | (DescType.INTERRUPT_GATE << 8),
+          TRAP_FLAGS= (1<<15) | (DescType.TRAP_GATE << 8),
+    }
+
+
+    private 
+    void set(ulong _offset, ushort _flags)
+    {
+        this.selector = 0x8;//GDT CS
+        this.flags= _flags;
+        this.offset_0_15 = _offset & 0xFFFF;
+        this.offset_16_31 = (_offset >> 16) & 0xFFFF;
+        this.offset_32_63 = (_offset >> 32);
+        this._res=0;
+    }
+
+    void set_trap(void* fn)
+    {
+        set(cast(size_t)fn, TRAP_FLAGS);
+    }
+
+    void set_interrput(void* fn)
+    { 
+        set(cast(size_t)fn, INTERR_FLAGS);
+    }
+                           
+
+    int p() const @property {
+        return flags & FLAGS_P_MASK;
+    }
+
+    int dpl() const @property {
+        return flags & FLAGS_DPL_MASK;
+    }
+
+    int type() const @property {
+        return flags & FLAGS_TYPE_MASK;
+    }
+
+    int ist() const @property {
+        return flags & FLAGS_IST_MASK;
+    }
+    
+}
+
+static assert(GateDesc.sizeof == 16);
+
+struct Idtr {
+align(1):
+    ushort limit; //idt table size
+    size_t base_addr;
+}
+static assert(Idtr.sizeof == 2+8);
+
+
+
+abstract final class Idt {
+//@safe nothrow: @nogc: 
+static:
+    private __gshared Idtr idtr=void;
+    private __gshared GateDesc[256] idt = void;
+
+    void cpu_todo_handler() {
+        Err.panic("CPU interrput todo handler");
+    }
+
+    void cpu0_div0() {
+        Err.panic("CPU Exception: div 0");
+    }
+
+    public
+    void init()
+    {
+        //全部设置一下
+        foreach(int i; 0 .. idt.length)
+            idt[i].set_interrput(&cpu_todo_handler);
+
+        //设置cpu 保留0-31 给内部异常处理
+        //idt[0].set_trap(&cpu0_div0);
+        //idt[0].set_interrput(&cpu0_div0);
+
+
+        //用户自定义
+        //idt[32].set_interrput(&pic.timer_handler);
+        //idt[33].set_interrput(&pic.keyboard_handler);
+
+        //load idt
+        static assert(idt.sizeof -1 == GateDesc.sizeof * 256 -1);
+        idtr.limit = idt.sizeof -1;
+        idtr.base_addr = cast(ulong)idt.ptr;
+
+        auto idt_addr = &idt;
+        asm pure nothrow @nogc{
+            mov RAX, idt_addr;
+            lidt [RAX];
+        }
+
+        Vga.puts("idt init ok");
+
+
+        //重新映射PIC IRQ 到自定义index
+        //init_8259a();
+    }
+
+
+}

@@ -56,6 +56,7 @@ start:
     ;reset eflags
 	push 0
 	popf 
+	cli
 
 	;设置esp, 支持push指令调用 因为push 指令会sub %4 esp
 	mov esp, early_stack_top
@@ -196,8 +197,8 @@ start64:
 	call dmain
 
 
-	hlt
 sleep:
+	hlt
 	jmp sleep
 
 

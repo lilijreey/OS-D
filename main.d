@@ -54,9 +54,11 @@ extern(C) void dmain(uint magic, const MultibootInfo *info)
 
 
     //init GDT mmap higt viraul memory to xx
-    Idt.init();
+    //Idt.init();
+    IDT.init();
 
-    //int b=0;
-    //int a = 1/b;
+    Vga.putsln("start div 0");
+    int b=0;
+    int a = 1/b;
 
 }
